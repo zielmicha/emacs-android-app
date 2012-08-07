@@ -949,6 +949,9 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
             Log.w(TAG, "onKeyDown " + keyCode);
         }
 
+        if(keyCode == KeyEvent.KEYCODE_MENU) {
+            return false;
+        }
         // Translate the keyCode into an ASCII character.
         mKeyListener.keyDown(keyCode, event, getKeypadApplicationMode());
         return true;
@@ -971,7 +974,9 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
         if (LOG_KEY_EVENTS) {
             Log.w(TAG, "onKeyUp " + keyCode);
         }
-
+        if(keyCode == KeyEvent.KEYCODE_MENU) {
+            return false;
+        }
         mKeyListener.keyUp(keyCode, event);;
         return true;
     }
@@ -2092,7 +2097,7 @@ class TermKeyListener {
         }
         if(keyCode == KeyEvent.KEYCODE_SHIFT_LEFT || keyCode == KeyEvent.KEYCODE_SHIFT_RIGHT)
             this.shift = true;
-        else if(keyCode == KeyEvent.KEYCODE_ALT_LEFT || keyCode == KeyEvent.KEYCODE_ALT_RIGHT || keyCode == KEYCODE_MENU)
+        else if(keyCode == KeyEvent.KEYCODE_ALT_LEFT || keyCode == KeyEvent.KEYCODE_ALT_RIGHT)
             this.alt = true;
         else if(keyCode == KeyEvent.KEYCODE_CTRL_LEFT || keyCode == KeyEvent.KEYCODE_CTRL_RIGHT)
             this.ctrl = true;
