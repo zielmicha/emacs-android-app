@@ -16,6 +16,8 @@
 
 package jackpal.androidterm;
 
+import com.zielm.emacs.R;
+
 import java.util.Iterator;
 import java.util.LinkedList;
 

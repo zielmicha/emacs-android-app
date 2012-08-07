@@ -16,6 +16,8 @@
 
 package jackpal.androidterm;
 
+import com.zielm.emacs.R;
+
 import android.app.Service;
 import android.os.Binder;
 import android.os.IBinder;

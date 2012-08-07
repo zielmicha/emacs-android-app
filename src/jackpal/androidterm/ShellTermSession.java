@@ -16,6 +16,8 @@
 
 package jackpal.androidterm;
 
+import com.zielm.emacs.R;
+
 import java.io.File;
 import java.io.FileDescriptor;
 import java.io.FileInputStream;

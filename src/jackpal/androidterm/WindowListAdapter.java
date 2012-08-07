@@ -16,6 +16,8 @@
 
 package jackpal.androidterm;
 
+import com.zielm.emacs.R;
+
 import android.app.Activity;
 import android.view.View;
 import android.view.ViewGroup;

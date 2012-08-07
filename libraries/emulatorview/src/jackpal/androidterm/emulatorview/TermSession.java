@@ -233,6 +233,8 @@ public class TermSession {
      */
     public void write(byte[] data, int offset, int count) {
         try {
+            /*System.err.println("write " + java.util.Arrays.toString(data) + " oc=" + offset + "," + count);
+              Thread.dumpStack();*/
             mWriteQueue.write(data, offset, count);
         } catch (InterruptedException e) {
         }

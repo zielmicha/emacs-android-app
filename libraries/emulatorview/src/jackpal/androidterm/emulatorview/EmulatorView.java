@@ -17,6 +17,7 @@
 package jackpal.androidterm.emulatorview;
 
 import java.io.IOException;
+import java.text.Normalizer;
 
 import android.content.Context;
 import android.content.res.Resources;
@@ -64,7 +65,7 @@ import jackpal.androidterm.emulatorview.compat.KeyCharacterMapCompat;
  */
 public class EmulatorView extends View implements GestureDetector.OnGestureListener {
     private final String TAG = "EmulatorView";
-    private final boolean LOG_KEY_EVENTS = false;
+    private final boolean LOG_KEY_EVENTS = true;
     private final boolean LOG_IME = false;
 
     /**
@@ -345,7 +346,7 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
 
     @Override
     public boolean onCheckIsTextEditor() {
-        return true;
+        return false;
     }
 
     @Override
@@ -364,46 +365,47 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
             private int mSelectedTextStart;
             private int mSelectedTextEnd;
 
-            private void sendChar(int c) {
-                try {
-                    mapAndSend(c);
-                } catch (IOException ex) {
+            public char unaccent(char s) {
+                if(s == 'ź') return 'x'; // special case... should create config file
+                String normalized = Normalizer.normalize("" + s, Normalizer.Form.NFD);
+                String it = normalized.replaceAll("[^\\p{ASCII}]", "");
+                if(it.length() == 0)
+                    return ' ';
+                else
+                    return it.charAt(0);
+            }
 
+            private void sendChar(int c) {
+                // convert back to keycode
+
+                c = unaccent((char)c);
+                if(c >= '0' && c <= '9') {
+                    keyDownUp(c - '0' + KeyEvent.KEYCODE_0);
+                } else if(c >= 'a' && c <= 'z') {
+                    keyDownUp(c - 'a' + KeyEvent.KEYCODE_A);
+                } else if(c >= 'A' && c <= 'Z') {
+                    boolean old = mKeyListener.shift;
+                    mKeyListener.shift = true;
+                    keyDownUp(c - 'A' + KeyEvent.KEYCODE_A);
+                    mKeyListener.shift = old;
+                } else {
+                    Log.w(TAG, "writing unknow char " + c);
+                    mTermSession.write(c);
                 }
+            }
+
+            private void keyDownUp(int keycode) {
+                mKeyListener.keyDown(keycode, null, getKeypadApplicationMode());
+                mKeyListener.keyUp(keycode, null);
             }
 
             private void sendText(CharSequence text) {
                 int n = text.length();
                 char c;
-                try {
-                    for(int i = 0; i < n; i++) {
-                        c = text.charAt(i);
-                        if (Character.isHighSurrogate(c)) {
-                            int codePoint;
-                            if (++i < n) {
-                                codePoint = Character.toCodePoint(c, text.charAt(i));
-                            } else {
-                                // Unicode Replacement Glyph, aka white question mark in black diamond.
-                                codePoint = '\ufffd';
-                            }
-                            mapAndSend(codePoint);
-                        } else {
-                            mapAndSend(c);
-                        }
-                    }
-                } catch (IOException e) {
-                    Log.e(TAG, "error writing ", e);
+                for(int i = 0; i < n; i++) {
+                    c = text.charAt(i);
+                    sendChar(c);
                 }
-            }
-
-            private void mapAndSend(int c) throws IOException {
-                int result = mKeyListener.mapControlChar(c);
-                if (result < TermKeyListener.KEYCODE_OFFSET) {
-                    mTermSession.write(result);
-                } else {
-                    mKeyListener.handleKeyCode(result - TermKeyListener.KEYCODE_OFFSET, getKeypadApplicationMode());
-                }
-                clearSpecialKeyStatus();
             }
 
             public boolean beginBatchEdit() {
@@ -946,24 +948,9 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
         if (LOG_KEY_EVENTS) {
             Log.w(TAG, "onKeyDown " + keyCode);
         }
-        if (handleControlKey(keyCode, true)) {
-            return true;
-        } else if (handleFnKey(keyCode, true)) {
-            return true;
-        } else if (isSystemKey(keyCode, event)) {
-            if (! isInterceptedSystemKey(keyCode) ) {
-                // Don't intercept the system keys
-                return super.onKeyDown(keyCode, event);
-            }
-        }
 
         // Translate the keyCode into an ASCII character.
-
-        try {
-            mKeyListener.keyDown(keyCode, event, getKeypadApplicationMode());
-        } catch (IOException e) {
-            // Ignore I/O exceptions
-        }
+        mKeyListener.keyDown(keyCode, event, getKeypadApplicationMode());
         return true;
     }
 
@@ -984,58 +971,14 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
         if (LOG_KEY_EVENTS) {
             Log.w(TAG, "onKeyUp " + keyCode);
         }
-        if (handleControlKey(keyCode, false)) {
-            return true;
-        } else if (handleFnKey(keyCode, false)) {
-            return true;
-        } else if (isSystemKey(keyCode, event)) {
-            // Don't intercept the system keys
-            if ( ! isInterceptedSystemKey(keyCode) ) {
-                return super.onKeyUp(keyCode, event);
-            }
-        }
 
-        mKeyListener.keyUp(keyCode, event);
-        clearSpecialKeyStatus();
+        mKeyListener.keyUp(keyCode, event);;
         return true;
     }
 
 
-    private boolean handleControlKey(int keyCode, boolean down) {
-        if (keyCode == mControlKeyCode) {
-            if (LOG_KEY_EVENTS) {
-                Log.w(TAG, "handleControlKey " + keyCode);
-            }
-            mKeyListener.handleControlKey(down);
-            return true;
-        }
-        return false;
-    }
-
-    private boolean handleFnKey(int keyCode, boolean down) {
-        if (keyCode == mFnKeyCode) {
-            if (LOG_KEY_EVENTS) {
-                Log.w(TAG, "handleFnKey " + keyCode);
-            }
-            mKeyListener.handleFnKey(down);
-            return true;
-        }
-        return false;
-    }
-
-    private boolean isSystemKey(int keyCode, KeyEvent event) {
-        return event.isSystem();
-    }
-
     private void clearSpecialKeyStatus() {
-        if (mIsControlKeySent) {
-            mIsControlKeySent = false;
-            mKeyListener.handleControlKey(false);
-        }
-        if (mIsFnKeySent) {
-            mIsFnKeySent = false;
-            mKeyListener.handleFnKey(false);
-        }
+        mKeyListener.clearSpecialKeyStatus();
     }
 
     private void updateText() {
@@ -1200,8 +1143,7 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
      * Send a Ctrl key event to the terminal.
      */
     public void sendControlKey() {
-        mIsControlKeySent = true;
-        mKeyListener.handleControlKey(true);
+
     }
 
     /**
@@ -1209,16 +1151,14 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
      * generate various special characters and escape codes.
      */
     public void sendFnKey() {
-        mIsFnKeySent = true;
-        mKeyListener.handleFnKey(true);
+
     }
 
     /**
      * Set the key code to be sent when the Back key is pressed.
      */
     public void setBackKeyCharacter(int keyCode) {
-        mKeyListener.setBackKeyCharacter(keyCode);
-        mBackKeySendsCharacter = (keyCode != 0);
+
     }
 
     /**
@@ -1949,7 +1889,7 @@ class TermKeyListener {
         mKeyCodes[KEYCODE_INSERT] = "\033[2~";
         mKeyCodes[KEYCODE_FORWARD_DEL] = "\033[3~";
         mKeyCodes[KEYCODE_MOVE_HOME] = "\033[1~";
-        mKeyCodes[KEYCODE_MOVE_END] = "\033[4~";
+        mKeyCodes[KEYCODE_MOVE_END] = "\033OF";
         mKeyCodes[KEYCODE_PAGE_UP] = "\033[5~";
         mKeyCodes[KEYCODE_PAGE_DOWN] = "\033[6~";
         mKeyCodes[KEYCODE_DEL]= "\177";
@@ -2077,13 +2017,9 @@ class TermKeyListener {
         }
     }
 
-    private ModifierKey mAltKey = new ModifierKey();
-
-    private ModifierKey mCapKey = new ModifierKey();
-
-    private ModifierKey mControlKey = new ModifierKey();
-
-    private ModifierKey mFnKey = new ModifierKey();
+    boolean alt;
+    boolean shift;
+    boolean ctrl;
 
     private TermSession mTermSession;
 
@@ -2101,104 +2037,13 @@ class TermKeyListener {
         initKeyCodes();
     }
 
-    public void setBackKeyCharacter(int code) {
-        mBackKeyCode = code;
-    }
-
-    public void handleControlKey(boolean down) {
-        if (down) {
-            mControlKey.onPress();
-        } else {
-            mControlKey.onRelease();
+    public void keyDown(int keyCode, KeyEvent event, boolean appMode) {
+        try {
+            _keyDown(keyCode, event, appMode);
+        } catch(IOException err) {
+            System.err.println("AAAA! Error!!");
+            err.printStackTrace();
         }
-    }
-
-    public void handleFnKey(boolean down) {
-        if (down) {
-            mFnKey.onPress();
-        } else {
-            mFnKey.onRelease();
-        }
-    }
-
-    public int mapControlChar(int ch) {
-        return mapControlChar(mControlKey.isActive(), mFnKey.isActive(), ch);
-    }
-
-    public int mapControlChar(boolean control, boolean fn, int ch) {
-        int result = ch;
-        if (control) {
-            // Search is the control key.
-            if (result >= 'a' && result <= 'z') {
-                result = (char) (result - 'a' + '\001');
-            } else if (result >= 'A' && result <= 'Z') {
-                result = (char) (result - 'A' + '\001');
-            } else if (result == ' ' || result == '2') {
-                result = 0;
-            } else if (result == '[' || result == '3') {
-                result = 27; // ^[ (Esc)
-            } else if (result == '\\' || result == '4') {
-                result = 28;
-            } else if (result == ']' || result == '5') {
-                result = 29;
-            } else if (result == '^' || result == '6') {
-                result = 30; // control-^
-            } else if (result == '_' || result == '7') {
-                result = 31;
-            } else if (result == '8') {
-                result = 127; // DEL
-            } else if (result == '9') {
-                result = KEYCODE_OFFSET + TermKeyListener.KEYCODE_F11;
-            } else if (result == '0') {
-                result = KEYCODE_OFFSET + TermKeyListener.KEYCODE_F12;
-            }
-        } else if (fn) {
-            if (result == 'w' || result == 'W') {
-                result = KEYCODE_OFFSET + KeyEvent.KEYCODE_DPAD_UP;
-            } else if (result == 'a' || result == 'A') {
-                result = KEYCODE_OFFSET + KeyEvent.KEYCODE_DPAD_LEFT;
-            } else if (result == 's' || result == 'S') {
-                result = KEYCODE_OFFSET + KeyEvent.KEYCODE_DPAD_DOWN;
-            } else if (result == 'd' || result == 'D') {
-                result = KEYCODE_OFFSET + KeyEvent.KEYCODE_DPAD_RIGHT;
-            } else if (result == 'p' || result == 'P') {
-                result = KEYCODE_OFFSET + TermKeyListener.KEYCODE_PAGE_UP;
-            } else if (result == 'n' || result == 'N') {
-                result = KEYCODE_OFFSET + TermKeyListener.KEYCODE_PAGE_DOWN;
-            } else if (result == 't' || result == 'T') {
-                result = KEYCODE_OFFSET + KeyEvent.KEYCODE_TAB;
-            } else if (result == 'l' || result == 'L') {
-                result = '|';
-            } else if (result == 'u' || result == 'U') {
-                result = '_';
-            } else if (result == 'e' || result == 'E') {
-                result = 27; // ^[ (Esc)
-            } else if (result == '.') {
-                result = 28; // ^\
-            } else if (result > '0' && result <= '9') {
-                // F1-F9
-                result = (char)(result + KEYCODE_OFFSET + TermKeyListener.KEYCODE_F1 - 1);
-            } else if (result == '0') {
-                result = KEYCODE_OFFSET + TermKeyListener.KEYCODE_F10;
-            } else if (result == 'i' || result == 'I') {
-                result = KEYCODE_OFFSET + TermKeyListener.KEYCODE_INSERT;
-            } else if (result == 'x' || result == 'X') {
-                result = KEYCODE_OFFSET + TermKeyListener.KEYCODE_FORWARD_DEL;
-            } else if (result == 'h' || result == 'H') {
-                result = KEYCODE_OFFSET + TermKeyListener.KEYCODE_MOVE_HOME;
-            } else if (result == 'f' || result == 'F') {
-                result = KEYCODE_OFFSET + TermKeyListener.KEYCODE_MOVE_END;
-            }
-        }
-
-        if (result > -1) {
-            mAltKey.adjustAfterKeypress();
-            mCapKey.adjustAfterKeypress();
-            mControlKey.adjustAfterKeypress();
-            mFnKey.adjustAfterKeypress();
-        }
-
-        return result;
     }
 
     /**
@@ -2207,79 +2052,95 @@ class TermKeyListener {
      * @param keyCode the keycode of the keyDown event
      *
      */
-    public void keyDown(int keyCode, KeyEvent event, boolean appMode) throws IOException {
+    private void writeCtrlArrow(char c) {
+        mTermSession.write(0x1b);
+        mTermSession.write('[');
+        mTermSession.write('1');
+        mTermSession.write(';');
+        if(this.ctrl)
+            mTermSession.write('5');
+        else if(this.shift)
+            mTermSession.write('2');
+        else
+            mTermSession.write('3');
+        mTermSession.write(c);
+    }
+
+    private void _keyDown(int keyCode, KeyEvent event, boolean appMode) throws IOException {
+        if(this.ctrl || this.shift || this.alt) {
+            // JAVA :(
+            /*
+              map = {KeyEvent.KEYCODE_DPAD_LEFT: 'C', ...}
+              if keyCode in map:
+                 self.mTermSession.write('\x1b;2' + map[keyCode])
+             */
+            if(keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+                writeCtrlArrow('A'); return;
+            }
+            if(keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+                writeCtrlArrow('B'); return;
+            }
+            if(keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                writeCtrlArrow('C'); return;
+            }
+            if(keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+                writeCtrlArrow('D'); return;
+            }
+        }
         if (handleKeyCode(keyCode, appMode)) {
             return;
         }
-        int result = -1;
-        boolean allowToggle = isEventFromToggleDevice(event);
-        boolean chordedCtrl = false;
-        switch (keyCode) {
-        case KeyEvent.KEYCODE_ALT_RIGHT:
-        case KeyEvent.KEYCODE_ALT_LEFT:
-            if (allowToggle) {
-                mAltKey.onPress();
+        if(keyCode == KeyEvent.KEYCODE_SHIFT_LEFT || keyCode == KeyEvent.KEYCODE_SHIFT_RIGHT)
+            this.shift = true;
+        else if(keyCode == KeyEvent.KEYCODE_ALT_LEFT || keyCode == KeyEvent.KEYCODE_ALT_RIGHT || keyCode == KEYCODE_MENU)
+            this.alt = true;
+        else if(keyCode == KeyEvent.KEYCODE_CTRL_LEFT || keyCode == KeyEvent.KEYCODE_CTRL_RIGHT)
+            this.ctrl = true;
+        else {
+            if(keyCode >= KeyEvent.KEYCODE_A && keyCode <= KeyEvent.KEYCODE_Z) {
+                char ch = (char)(keyCode - KeyEvent.KEYCODE_A + 'a');
+                if(this.ctrl) {
+                    mTermSession.write(ch - 0x60);
+                } else if(this.shift) {
+                    mTermSession.write(Character.toUpperCase(ch));
+                } else if(this.alt) {
+                    System.out.println("encountered alt-" + ch);
+                    mTermSession.write((char)0x1b);
+                    mTermSession.write(ch);
+                } else {
+                    mTermSession.write(ch);
+                }
             }
-            break;
-
-        case KeyEvent.KEYCODE_SHIFT_LEFT:
-        case KeyEvent.KEYCODE_SHIFT_RIGHT:
-            if (allowToggle) {
-                mCapKey.onPress();
+            else if(keyCode >= KeyEvent.KEYCODE_0 && keyCode <= KeyEvent.KEYCODE_9) {
+                int number = keyCode - KeyEvent.KEYCODE_0;
+                final String shiftNums = ")!@#$%^&*(";
+                if(this.shift) {
+                    mTermSession.write(shiftNums.charAt(number));
+                } else {
+                    mTermSession.write('0' + number);
+                }
             }
-            break;
-
-        case KEYCODE_CTRL_LEFT:
-        case KEYCODE_CTRL_RIGHT:
-            // Ignore the control key.
-            return;
-
-        case KEYCODE_CAPS_LOCK:
-            // Ignore the capslock key.
-            return;
-
-        case KeyEvent.KEYCODE_BACK:
-            result = mBackKeyCode;
-            break;
-
-        default: {
-            int metaState = event.getMetaState();
-            chordedCtrl = ((META_CTRL_ON & metaState) != 0);
-            boolean effectiveCaps = allowToggle &&
-                    (mCapKey.isActive());
-            boolean effectiveAlt = allowToggle && mAltKey.isActive();
-            int effectiveMetaState = metaState & (~META_CTRL_MASK);
-            if (effectiveCaps) {
-                effectiveMetaState |= KeyEvent.META_SHIFT_ON;
+            else if(keyCode == KeyEvent.KEYCODE_SPACE) {
+                if(this.ctrl)
+                    mTermSession.write('\0');
+                else
+                    mTermSession.write(' ');
             }
-            if (effectiveAlt) {
-                effectiveMetaState |= KeyEvent.META_ALT_ON;
-            }
-            result = event.getUnicodeChar(effectiveMetaState);
-            break;
-            }
-        }
-
-        boolean effectiveControl = chordedCtrl || (allowToggle && mControlKey.isActive());
-        boolean effectiveFn = allowToggle && mFnKey.isActive();
-
-        result = mapControlChar(effectiveControl, effectiveFn, result);
-
-        if (result >= KEYCODE_OFFSET) {
-            handleKeyCode(result - KEYCODE_OFFSET, appMode);
-        } else if (result >= 0) {
-            mTermSession.write(result);
         }
     }
 
-    private boolean isEventFromToggleDevice(KeyEvent event) {
-        if (AndroidCompat.SDK < 11) {
-            return true;
-        }
-        KeyCharacterMapCompat kcm = KeyCharacterMapCompat.wrap(
-                KeyCharacterMap.load(event.getDeviceId()));
-        return kcm.getModifierBehaviour() ==
-                KeyCharacterMapCompat.MODIFIER_BEHAVIOR_CHORDED_OR_TOGGLED;
+    /**
+     * Handle a keyUp event.
+     *
+     * @param keyCode the keyCode of the keyUp event
+     */
+    public void keyUp(int keyCode, KeyEvent event) {
+        if(keyCode == KeyEvent.KEYCODE_SHIFT_LEFT || keyCode == KeyEvent.KEYCODE_SHIFT_RIGHT)
+            this.shift = false;
+        else if(keyCode == KeyEvent.KEYCODE_ALT_LEFT || keyCode == KeyEvent.KEYCODE_ALT_RIGHT || keyCode == KEYCODE_MENU)
+            this.alt = false;
+        else if(keyCode == KeyEvent.KEYCODE_CTRL_LEFT || keyCode == KeyEvent.KEYCODE_CTRL_RIGHT)
+            this.ctrl = false;
     }
 
     public boolean handleKeyCode(int keyCode, boolean appMode) throws IOException {
@@ -2299,35 +2160,7 @@ class TermKeyListener {
         return false;
     }
 
-    /**
-     * Handle a keyUp event.
-     *
-     * @param keyCode the keyCode of the keyUp event
-     */
-    public void keyUp(int keyCode, KeyEvent event) {
-        boolean allowToggle = isEventFromToggleDevice(event);
-        switch (keyCode) {
-        case KeyEvent.KEYCODE_ALT_LEFT:
-        case KeyEvent.KEYCODE_ALT_RIGHT:
-            if (allowToggle) {
-                mAltKey.onRelease();
-            }
-            break;
-        case KeyEvent.KEYCODE_SHIFT_LEFT:
-        case KeyEvent.KEYCODE_SHIFT_RIGHT:
-            if (allowToggle) {
-                mCapKey.onRelease();
-            }
-            break;
-
-        case KEYCODE_CTRL_LEFT:
-        case KEYCODE_CTRL_RIGHT:
-            // ignore control keys.
-            break;
-
-        default:
-            // Ignore other keyUps
-            break;
-        }
+    public void clearSpecialKeyStatus() {
+        shift = ctrl = alt = false;
     }
 }

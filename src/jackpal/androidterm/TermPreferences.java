@@ -16,6 +16,8 @@
 
 package jackpal.androidterm;
 
+import com.zielm.emacs.R;
+
 import android.os.Bundle;
 import android.preference.PreferenceActivity;
 import android.view.MenuItem;

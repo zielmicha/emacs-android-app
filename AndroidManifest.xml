@@ -1,9 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="jackpal.androidterm"
+    package="com.zielm.emacs"
       android:versionName="1.0.44"
       android:versionCode="45"
       android:installLocation="auto">
-    <uses-sdk android:minSdkVersion="3" android:targetSdkVersion="11" />
+    <uses-sdk android:minSdkVersion="9" android:targetSdkVersion="11" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
@@ -25,18 +25,19 @@
                 android:protectionLevel="dangerous" />
     <application android:icon="@drawable/ic_launcher"
                 android:label="@string/application_terminal">
-        <activity android:name="Term"
+        <activity android:name="jackpal.androidterm.Term"
                 android:theme="@style/Theme"
                 android:launchMode="singleTask"
                 android:configChanges="keyboard|keyboardHidden|orientation"
-                android:windowSoftInputMode="adjustResize|stateAlwaysVisible">
+                android:windowSoftInputMode="adjustResize|stateAlwaysVisible"
+                android:screenOrientation="landscape">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <activity-alias android:name="TermInternal"
-                android:targetActivity="Term"
+        <activity-alias android:name="jackpal.androidterm.TermInternal"
+                android:targetActivity="jackpal.androidterm.Term"
                 android:exported="false">
             <intent-filter>
                 <action android:name="jackpal.androidterm.private.OPEN_NEW_WINDOW" />
@@ -47,25 +48,10 @@
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity-alias>
-        <activity android:name="RemoteInterface"
-                android:excludeFromRecents="true">
-            <intent-filter>
-                <action android:name="jackpal.androidterm.OPEN_NEW_WINDOW" />
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
-        </activity>
-        <activity-alias android:name="RunScript"
-                android:targetActivity="RemoteInterface"
-                android:permission="jackpal.androidterm.permission.RUN_SCRIPT">
-            <intent-filter>
-                <action android:name="jackpal.androidterm.RUN_SCRIPT" />
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
-        </activity-alias>
-        <activity android:name="TermPreferences"
+        <activity android:name="jackpal.androidterm.TermPreferences"
                 android:label="@string/preferences" />
-        <activity android:name="WindowList"
+        <activity android:name="jackpal.androidterm.WindowList"
                 android:label="@string/window_list" />
-        <service android:name="TermService" />
+        <service android:name="jackpal.androidterm.TermService" />
     </application>
 </manifest>

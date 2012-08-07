@@ -16,6 +16,8 @@
 
 package jackpal.androidterm;
 
+import com.zielm.emacs.R;
+
 import android.app.ListActivity;
 import android.content.ComponentName;
 import android.content.Context;

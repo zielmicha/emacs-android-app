@@ -16,10 +16,16 @@
 
 package jackpal.androidterm;
 
+import com.zielm.emacs.R;
+
 import java.io.UnsupportedEncodingException;
 import java.text.Collator;
 import java.util.Arrays;
 import java.util.Locale;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
 
 import android.app.Activity;
 import android.app.AlertDialog;
@@ -250,9 +256,34 @@ public class Term extends Activity implements UpdateCallback {
 
     private Handler mHandler = new Handler();
 
+    private void unpackAssets() {
+        // TODO: not always
+        try {
+            unpackAsset("busybox");
+            unpackAsset("init.sh");
+            unpackAsset("initbb.sh");
+        } catch(IOException err) {
+            err.printStackTrace();
+        }
+    }
+
+    private void unpackAsset(String name) throws IOException {
+        byte[] buff = new byte[4096];
+        int i;
+        InputStream input = getAssets().open(name);
+        OutputStream output = new FileOutputStream("/data/data/com.zielm.emacs/" + name);
+        while((i = input.read(buff, 0, 4096)) > 0) {
+            output.write(buff, 0, i);
+        }
+        output.close();
+        input.close();
+    }
+
     @Override
     public void onCreate(Bundle icicle) {
         super.onCreate(icicle);
+        Log.e(TermDebug.LOG_TAG, "unpack assets");
+        unpackAssets();
         Log.e(TermDebug.LOG_TAG, "onCreate");
         mPrefs = PreferenceManager.getDefaultSharedPreferences(this);
         mSettings = new TermSettings(getResources(), mPrefs);
@@ -605,10 +636,6 @@ public class Term extends Activity implements UpdateCallback {
             toast.show();
         } else if (id == R.id.menu_send_email) {
             doEmailTranscript();
-        } else if (id == R.id.menu_special_keys) {
-            doDocumentKeys();
-        } else if (id == R.id.menu_toggle_soft_keyboard) {
-            doToggleSoftKeyboard();
         } else if (id == R.id.menu_toggle_wakelock) {
             doToggleWakeLock();
         } else if (id == R.id.menu_toggle_wifilock) {
@@ -756,8 +783,6 @@ public class Term extends Activity implements UpdateCallback {
       menu.add(0, SELECT_TEXT_ID, 0, R.string.select_text);
       menu.add(0, COPY_ALL_ID, 0, R.string.copy_all);
       menu.add(0, PASTE_ID, 0,  R.string.paste);
-      menu.add(0, SEND_CONTROL_KEY_ID, 0, R.string.send_control_key);
-      menu.add(0, SEND_FN_KEY_ID, 0, R.string.send_fn_key);
       if (!canPaste()) {
           menu.getItem(PASTE_ID).setEnabled(false);
       }
